@@ -221,7 +221,7 @@ src/
 ## 🔌 Integrasi Backend
 
 ### Dokumentasi API
-Lihat file lengkap di: **[docs/backendSpecification.md](docs/BACKEND_API_SPEC.md)**
+Lihat file lengkap di: **[docs/backendSpecification.md](docs/backendSpecification.md)**
 
 ### Ringkasan Endpoint
 
