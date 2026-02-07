@@ -18,12 +18,9 @@ pip install -r requirements.txt
 
 # Copy dan edit environment variables
 cp .env.example ../.env
-# Atau manual copy, lalu edit SECRET_KEY dan JWT_SECRET di .env
 
-# Generate SECRET_KEY dan JWT_SECRET (opsional):
-# python -c "import secrets; print(secrets.token_urlsafe(32))"
 
-# Initialize database dan create admin user
+# Initialize database dan buat admin user
 python init_db.py
 ```
 
