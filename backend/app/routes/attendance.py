@@ -12,107 +12,92 @@ from ..schemas import (
     BatchAttendanceUpdate, StudentAttendanceStatus
 )
 from ..models import Student, Attendance, User, ClassSchedule
-from ..auth import get_current_user
+from ..auth import get_current_user, get_teacher_classes
 from ..barcode import verify_token
 from ..timezone_utils import get_wib_now, to_wib
 
 router = APIRouter(prefix="/api/attendance", tags=["Attendance"])
 
 
-@router.post("/scan", response_model=ScanResult)
-async def scan_qr_code(
-    scan_data: AttendanceScan,
-    db: Session = Depends(get_db)
-):
 
+@router.post("/scan", response_model=ScanResult)
+async def scan_attendance(
+    scan_data: AttendanceScan,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Scan barcode for attendance with class access validation.
+    Teachers can only scan students from assigned classes.
+    """
     try:
         payload = verify_token(scan_data.token)
         student_id = int(payload["sid"])
-        nonce = payload["nonce"]
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid or expired QR code: {str(e)}"
+        student = db.query(Student).filter(Student.id == student_id).first()
+        
+        if not student:
+            return ScanResult(
+                success=False,
+                message="Student not found or token expired"
+            )
+        
+        allowed_classes = get_teacher_classes(current_user, db)
+        if allowed_classes is not None and student.class_name not in allowed_classes:
+            return ScanResult(
+                success=False,
+                message=f"Access denied to class {student.class_name}"
+            )
+        
+        now_wib = get_wib_now()
+        today_start = now_wib.replace(hour=0, minute=0, second=0, microsecond=0)
+        today_end = today_start + timedelta(days=1)
+        
+        existing = db.query(Attendance).filter(
+            and_(
+                Attendance.student_id == student.id,
+                Attendance.scanned_at >= today_start,
+                Attendance.scanned_at < today_end,
+                Attendance.is_undone == False
+            )
+        ).first()
+        
+        if existing:
+            return ScanResult(
+                success=False,
+                message=f"{student.name} sudah melakukan absensi hari ini",
+                student_name=student.name,
+                student_class=student.class_name,
+                student_photo_url=f"/api/students/{student.id}/photo" if student.photo_path else None,
+                already_scanned=True,
+                attendance_id=existing.id
+            )
+        
+        attendance = Attendance(
+            student_id=student.id,
+            scanned_at=now_wib,
+            status='Present'
         )
-    
-    # Get student
-    student = db.query(Student).filter(Student.id == student_id).first()
-    if not student:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Siswa tidak ditemukan"
-        )
-    
-    
-    # Check nonce to prevent reuse (reject if nonce doesn't match)
-    if student.barcode_nonce != nonce:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid QR code - token has been regenerated"
-        )
-    
-    # Use WIB timezone
-    now_wib = get_wib_now()
-    today_start = now_wib.replace(hour=0, minute=0, second=0, microsecond=0)
-    today_end = today_start + timedelta(days=1)
-    
-    existing_attendance = db.query(Attendance).filter(
-        and_(
-            Attendance.student_id == student_id,
-            Attendance.scanned_at >= today_start,
-            Attendance.scanned_at < today_end,
-            Attendance.is_undone == False
-        )
-    ).first()
-    
-    if existing_attendance:
-        photo_url = f"/api/students/{student.id}/photo" if student.photo_path else None
+        db.add(attendance)
+        db.commit()
+        db.refresh(attendance)
+        
         return ScanResult(
             success=True,
-            message="Sudah di absen hari ini",
+            message=f"Absensi berhasil untuk {student.name}",
             student_name=student.name,
             student_class=student.class_name,
-            student_photo_url=photo_url,
-            attendance_id=existing_attendance.id,
-            already_scanned=True
+            student_photo_url=f"/api/students/{student.id}/photo" if student.photo_path else None,
+            attendance_id=attendance.id,
+            already_scanned=False
         )
-    
-    # Get class schedule to determine late threshold
-    class_schedule = db.query(ClassSchedule).filter(
-        ClassSchedule.class_name == student.class_name
-    ).first()
-    
-    # Determine status based on scan time
-    late_threshold_time = class_schedule.late_threshold_time if class_schedule else datetime.strptime("07:30", "%H:%M").time()
-    scan_time_only = now_wib.time()
-    
-    # Compare times
-    if scan_time_only <= late_threshold_time:
-        attendance_status = "Present"
-    else:
-        attendance_status = "Late"
-    
-    # Create attendance with WIB time and status
-    attendance = Attendance(
-        student_id=student_id,
-        scanned_at=now_wib,
-        status=attendance_status
-    )
-    
-    db.add(attendance)
-    db.commit()
-    db.refresh(attendance)
-    
-    photo_url = f"/api/students/{student.id}/photo" if student.photo_path else None
-    return ScanResult(
-        success=True,
-        message="Absensi berhasil dicatat",
-        student_name=student.name,
-        student_class=student.class_name,
-        student_photo_url=photo_url,
-        attendance_id=attendance.id,
-        already_scanned=False
-    )
+        
+    except ValueError as e:
+        return ScanResult(
+            success=False,
+            message=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/{attendance_id}/undo")
@@ -121,7 +106,8 @@ async def undo_attendance(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-
+    """Undo attendance within 10 seconds with class access validation."""
+    
     attendance = db.query(Attendance).filter(Attendance.id == attendance_id).first()
     
     if not attendance:
@@ -136,7 +122,22 @@ async def undo_attendance(
             detail="Attendance already undone"
         )
     
-    time_elapsed = (datetime.utcnow() - attendance.scanned_at).total_seconds()
+    student = db.query(Student).filter(Student.id == attendance.student_id).first()
+    if not student:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Student not found"
+        )
+    
+    allowed_classes = get_teacher_classes(current_user, db)
+    if allowed_classes is not None and student.class_name not in allowed_classes:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Access denied to class {student.class_name}"
+        )
+    
+    now_wib = get_wib_now()
+    time_elapsed = (now_wib - attendance.scanned_at).total_seconds()
     
     if time_elapsed > 10:
         raise HTTPException(
@@ -145,7 +146,7 @@ async def undo_attendance(
         )
     
     attendance.is_undone = True
-    attendance.undone_at = datetime.utcnow()
+    attendance.undone_at = now_wib  
     
     db.commit()
     
@@ -164,10 +165,14 @@ async def get_attendance_history(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-
+    """Get attendance history with class access filtering for teachers."""
+    
     query = db.query(Attendance).join(Student)
     
-    # Apply filters
+    allowed_classes = get_teacher_classes(current_user, db)
+    if allowed_classes is not None:  # Teacher
+        query = query.filter(Student.class_name.in_(allowed_classes))
+    
     if date:
         try:
             date_obj = datetime.strptime(date, "%Y-%m-%d")
@@ -212,14 +217,22 @@ async def get_attendance_stats(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-
-    now = datetime.utcnow()
+    """Get attendance statistics with class access filtering for teachers."""
     
-    # Today
+    now = get_wib_now()
+    
+    allowed_classes = get_teacher_classes(current_user, db)
+    
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     today_end = today_start + timedelta(days=1)
     
-    total_today = db.query(func.count(Attendance.id)).filter(
+    def build_query():
+        query = db.query(func.count(Attendance.id)).join(Student)
+        if allowed_classes is not None:  # Teacher
+            query = query.filter(Student.class_name.in_(allowed_classes))
+        return query
+    
+    total_today = build_query().filter(
         and_(
             Attendance.scanned_at >= today_start,
             Attendance.scanned_at < today_end,
@@ -231,7 +244,7 @@ async def get_attendance_stats(
     week_start = (now - timedelta(days=days_since_monday)).replace(hour=0, minute=0, second=0, microsecond=0)
     week_end = week_start + timedelta(days=7)
     
-    total_this_week = db.query(func.count(Attendance.id)).filter(
+    total_this_week = build_query().filter(
         and_(
             Attendance.scanned_at >= week_start,
             Attendance.scanned_at < week_end,
@@ -239,13 +252,14 @@ async def get_attendance_stats(
         )
     ).scalar()
     
+    # This month
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     if now.month == 12:
         month_end = month_start.replace(year=now.year + 1, month=1)
     else:
         month_end = month_start.replace(month=now.month + 1)
     
-    total_this_month = db.query(func.count(Attendance.id)).filter(
+    total_this_month = build_query().filter(
         and_(
             Attendance.scanned_at >= month_start,
             Attendance.scanned_at < month_end,
@@ -253,7 +267,11 @@ async def get_attendance_stats(
         )
     ).scalar()
     
-    total_students = db.query(func.count(Student.id)).scalar()
+    # Total students (also filtered by class for teachers)
+    student_query = db.query(func.count(Student.id))
+    if allowed_classes is not None:  # Teacher
+        student_query = student_query.filter(Student.class_name.in_(allowed_classes))
+    total_students = student_query.scalar()
     
     return AttendanceStats(
         total_today=total_today or 0,

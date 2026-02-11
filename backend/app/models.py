@@ -6,14 +6,18 @@ from .database import Base
 
 
 class User(Base):
-    """Admin user model for authentication."""
+    """User model for authentication with role-based access."""
     __tablename__ = "users"
     
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String(50), unique=True, nullable=False, index=True)
     hashed_password = Column(String(255), nullable=False)
+    role = Column(String(20), default="teacher", nullable=False)  # "admin" or "teacher"
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationship to class access
+    class_access = relationship("TeacherClassAccess", back_populates="user", cascade="all, delete-orphan")
 
 
 class Student(Base):
@@ -64,3 +68,16 @@ class ClassSchedule(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class TeacherClassAccess(Base):
+    """Mapping table for teacher-class access control."""
+    __tablename__ = "teacher_class_access"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    class_name = Column(String(50), ForeignKey("class_schedule.class_name", ondelete="CASCADE"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    user = relationship("User", back_populates="class_access")

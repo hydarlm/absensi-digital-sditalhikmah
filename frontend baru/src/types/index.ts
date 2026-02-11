@@ -4,6 +4,9 @@
 export interface User {
     id: number;
     username: string;
+    role: string;
+    assignedClasses?: string[]; // For teachers to track assigned classes
+    // NEW: "admin" or "teacher"
     is_active: boolean;
     created_at: string;
 }
@@ -16,6 +19,7 @@ export interface LoginRequest {
 export interface TokenResponse {
     access_token: string;
     token_type: string;
+    role: string;  // NEW: "admin" or "teacher"
 }
 
 export interface AuthUser {
@@ -69,13 +73,7 @@ export interface ScanResult {
     student_photo_url?: string;
     attendance_id?: number;
     already_scanned: boolean;
-    student?: {
-        id: number;
-        nis: string;
-        name: string;
-        class: string;
-        photo?: string;
-    };
+    student?: Student;  // Use the Student type defined above
 }
 
 export interface AttendanceStats {

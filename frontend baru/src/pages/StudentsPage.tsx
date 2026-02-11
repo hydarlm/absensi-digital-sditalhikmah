@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence, Variants } from 'framer-motion';
 import { Container } from '@/components/layout/DashboardLayout';
 import { StudentTable } from '@/components/features/StudentTable';
 import { StudentForm } from '@/components/features/StudentForm';
 import { DeleteConfirmDialog } from '@/components/features/DeleteConfirmDialog';
+import { ImportStudentsDialog } from '@/components/features/ImportStudentsDialog';
 import { studentsService } from '@/services/students';
 import { classScheduleService } from '@/services/classSchedule';
 import type { Student } from '@/types';
@@ -11,7 +12,8 @@ import { StudentFormData } from '@/utils/validators';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
-import { UserPlus, Search, RefreshCw, Users } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { UserPlus, Search, RefreshCw, Users, X, Upload } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
 const containerVariants: Variants = {
@@ -69,10 +71,12 @@ export default function StudentsPage() {
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
+  const [classFilter, setClassFilter] = useState('');
 
   // Dialogs
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [showImportDialog, setShowImportDialog] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
 
   useEffect(() => {
@@ -80,9 +84,30 @@ export default function StudentsPage() {
     loadClasses();
   }, []);
 
+  const filterStudents = useCallback(() => {
+    let filtered = [...students];
+
+    // Class filter
+    if (classFilter) {
+      filtered = filtered.filter((s) => s.class_name === classFilter);
+    }
+
+    // Search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter((s) =>
+        s.name.toLowerCase().includes(query) ||
+        s.nis.toLowerCase().includes(query) ||
+        s.class_name.toLowerCase().includes(query)
+      );
+    }
+
+    setFilteredStudents(filtered);
+  }, [students, classFilter, searchQuery]);
+
   useEffect(() => {
     filterStudents();
-  }, [students, searchQuery]);
+  }, [filterStudents]);
 
   const loadClasses = async () => {
     try {
@@ -114,22 +139,6 @@ export default function StudentsPage() {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const filterStudents = () => {
-    let filtered = [...students];
-
-    // Search filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter((s) =>
-        s.name.toLowerCase().includes(query) ||
-        s.nis.toLowerCase().includes(query) ||
-        s.class_name.toLowerCase().includes(query)
-      );
-    }
-
-    setFilteredStudents(filtered);
   };
 
   const handleAddNew = () => {
@@ -277,7 +286,11 @@ export default function StudentsPage() {
               Kelola dan pantau data siswa SDIT AL HIKMAH
             </motion.p>
           </div>
-          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.1, duration: 0.3 }}>
+          <motion.div className="flex gap-2" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.1, duration: 0.3 }}>
+            <Button onClick={() => setShowImportDialog(true)} variant="outline" size="lg" className="gap-2 shadow-sm hover:shadow-md transition-shadow">
+              <Upload className="h-4 w-4" />
+              Import CSV
+            </Button>
             <Button onClick={handleAddNew} size="lg" className="gap-2 w-full sm:w-auto shadow-sm hover:shadow-md transition-shadow">
               <UserPlus className="h-4 w-4" />
               Tambah Siswa
@@ -333,6 +346,33 @@ export default function StudentsPage() {
                 <motion.div className="flex-1 relative" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2, duration: 0.3 }}>
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                   <Input placeholder="Cari nama, NIS, atau kelas..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10 h-10 focus-visible:ring-2" />
+                </motion.div>
+
+                {/* Class Filter */}
+                <motion.div className="sm:w-[200px] flex items-center gap-2" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.22, duration: 0.3 }}>
+                  <Select value={classFilter || undefined} onValueChange={setClassFilter}>
+                    <SelectTrigger className="h-10">
+                      <SelectValue placeholder="Semua Kelas" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {classes.map((className) => (
+                        <SelectItem key={className} value={className}>
+                          {className}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {classFilter && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-10 w-10 flex-shrink-0"
+                      onClick={() => setClassFilter('')}
+                      title="Reset filter kelas"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
                 </motion.div>
 
                 <motion.div className="flex gap-2 sm:gap-3" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.25, duration: 0.3 }}>
@@ -396,6 +436,13 @@ export default function StudentsPage() {
 
         {/* Delete Confirmation Dialog */}
         <AnimatePresence>{isDeleteOpen && <DeleteConfirmDialog isOpen={isDeleteOpen} onClose={() => setIsDeleteOpen(false)} onConfirm={handleDeleteConfirm} student={selectedStudent} isLoading={isFormLoading} />}</AnimatePresence>
+
+        {/* Import Students Dialog */}
+        <ImportStudentsDialog
+          open={showImportDialog}
+          onOpenChange={setShowImportDialog}
+          onSuccess={loadStudents}
+        />
       </motion.div>
     </Container>
   );

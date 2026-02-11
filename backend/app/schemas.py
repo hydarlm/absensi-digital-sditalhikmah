@@ -15,11 +15,13 @@ class LoginRequest(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    role: str  # "admin" or "teacher"
 
 
 class UserResponse(BaseModel):
     id: int
     username: str
+    role: str  # "admin" or "teacher"
     is_active: bool
     created_at: datetime
     
@@ -93,6 +95,7 @@ class AttendanceStats(BaseModel):
     total_today: int
     total_this_week: int
     total_this_month: int
+    total_students: int
 
 
 # Reports Schemas
@@ -146,3 +149,59 @@ class StudentAttendanceStatus(BaseModel):
 
 class ClassListResponse(BaseModel):
     classes: List[str]
+
+
+# ============================================================================
+# User Management Schemas (RBAC)
+# ============================================================================
+
+class UserCreate(BaseModel):
+    username: str = Field(..., min_length=3, max_length=50)
+    password: str = Field(..., min_length=6)
+    role: str = Field("teacher", pattern="^(admin|teacher)$")
+
+
+class UserUpdate(BaseModel):
+    username: Optional[str] = Field(None, min_length=3, max_length=50)
+    password: Optional[str] = Field(None, min_length=6)
+    role: Optional[str] = Field(None, pattern="^(admin|teacher)$")
+
+
+class UserWithClasses(UserResponse):
+    """User response with assigned classes for teachers."""
+    assigned_classes: List[str] = []
+
+
+class AssignClassesRequest(BaseModel):
+    class_names: List[str]
+
+
+class TeacherClassAccessResponse(BaseModel):
+    id: int
+    user_id: int
+    class_name: str
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+# ============================================================================
+# Excel Import Schemas
+# ============================================================================
+
+class ImportResultRow(BaseModel):
+    row: int
+    nis: str
+    name: str = "N/A"
+    class_name: str = "N/A"
+    success: bool = False
+    error: Optional[str] = None
+
+
+class ImportSummary(BaseModel):
+    total_rows: int
+    success: int
+    failed: int
+    duplicates: int
+    errors: List[ImportResultRow] = []

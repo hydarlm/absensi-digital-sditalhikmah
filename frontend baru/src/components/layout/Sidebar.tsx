@@ -11,6 +11,7 @@ import {
   Menu,
   X,
   BookOpen,
+  UserCog,  // NEW: For admin user management
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -21,11 +22,12 @@ interface SidebarProps {
 }
 
 const menuItems = [
-  { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
-  { icon: ScanLine, label: 'Scan Absensi', path: '/dashboard/scan' },
-  { icon: Users, label: 'Data Siswa', path: '/dashboard/students' },
-  { icon: BookOpen, label: 'Manajemen Kelas', path: '/dashboard/classes' },
-  { icon: FileText, label: 'Laporan Semester', path: '/dashboard/reports' },
+  { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard', roles: ['admin', 'teacher'] },
+  { icon: ScanLine, label: 'Scan Absensi', path: '/dashboard/scan', roles: ['admin', 'teacher'] },
+  { icon: Users, label: 'Data Siswa', path: '/dashboard/students', roles: ['admin'] },
+  { icon: BookOpen, label: 'Manajemen Kelas', path: '/dashboard/classes', roles: ['admin'] },
+  { icon: FileText, label: 'Laporan Semester', path: '/dashboard/reports', roles: ['admin'] },
+  { icon: UserCog, label: 'Kelola Pengguna', path: '/dashboard/users', roles: ['admin'] },
 ];
 
 export function Sidebar({ isOpen, onToggle }: SidebarProps) {
@@ -58,7 +60,7 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
           <div className="flex items-center justify-between p-4 border-b border-sidebar-border">
             <div className="flex items-center gap-3">
               <img
-                src='/public/logosekolah.png'
+                src='/logosekolah.png'
                 alt="SDIT AL HIKMAH"
                 className="w-10 h-10"
               />
@@ -79,36 +81,38 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
 
           {/* Navigation */}
           <nav className="flex-1 p-4 space-y-1 overflow-y-auto scrollbar-thin">
-            {menuItems.map((item) => {
-              const isActive = location.pathname === item.path;
-              return (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  onClick={() => window.innerWidth < 1024 && onToggle()}
-                  className={cn(
-                    'flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200',
-                    isActive
-                      ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-lg'
-                      : 'hover:bg-sidebar-accent text-sidebar-foreground/80 hover:text-sidebar-foreground'
-                  )}
-                >
-                  <item.icon className="h-5 w-5" />
-                  <span className="font-medium">{item.label}</span>
-                </Link>
-              );
-            })}
+            {menuItems
+              .filter(item => item.roles.includes(user?.role || 'teacher'))
+              .map((item) => {
+                const isActive = location.pathname === item.path;
+                return (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    onClick={() => window.innerWidth < 1024 && onToggle()}
+                    className={cn(
+                      'flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200',
+                      isActive
+                        ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-lg'
+                        : 'hover:bg-sidebar-accent text-sidebar-foreground/80 hover:text-sidebar-foreground'
+                    )}
+                  >
+                    <item.icon className="h-5 w-5" />
+                    <span className="font-medium">{item.label}</span>
+                  </Link>
+                );
+              })}
           </nav>
 
           {/* User Info & Logout */}
           <div className="p-4 border-t border-sidebar-border">
             <div className="flex items-center gap-3 px-3 py-2 mb-3">
               <div className="w-10 h-10 rounded-full bg-sidebar-primary flex items-center justify-center text-sidebar-primary-foreground font-bold">
-                {user?.name?.charAt(0) || 'G'}
+                {user?.username?.charAt(0).toUpperCase() || 'U'}
               </div>
               <div className="flex flex-col">
-                <span className="text-sm font-medium">{user?.name || 'Guru'}</span>
-                <span className="text-xs text-sidebar-foreground/70">Guru</span>
+                <span className="text-sm font-medium">{user?.username || 'User'}</span>
+                <span className="text-xs text-sidebar-foreground/70 capitalize">{user?.role || 'Teacher'}</span>
               </div>
             </div>
             <Button

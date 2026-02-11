@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from .database import Base, engine
-from .routes import auth, students, attendance, reports
+from .routes import auth, students, attendance, reports, users
 from .routes import class_schedules
 
 # Create database tables
@@ -23,6 +23,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(auth.router)
+app.include_router(users.router)  # NEW: User management
 app.include_router(students.router)
 app.include_router(attendance.router)
 app.include_router(reports.router)

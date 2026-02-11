@@ -1,5 +1,5 @@
 """
-Authentication and JWT token management.
+Authentication and JWT token management + RBAC helpers.
 """
 from datetime import datetime, timedelta
 from typing import Optional
@@ -91,3 +91,52 @@ def authenticate_user(db: Session, username: str, password: str) -> Optional[Use
     if not verify_password(password, user.hashed_password):
         return None
     return user
+
+
+# ============================================================================
+# Role-Based Access Control (RBAC)
+# ============================================================================
+
+def require_admin(current_user: User = Depends(get_current_user)) -> User:
+    """
+    Dependency untuk endpoint yang require admin role.
+    Raises 403 jika user bukan admin.
+    """
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required"
+        )
+    return current_user
+
+
+def require_teacher(current_user: User = Depends(get_current_user)) -> User:
+    """
+    Dependency untuk endpoint yang require teacher atau admin role.
+    Raises 403 jika user tidak punya akses.
+    """
+    if current_user.role not in ["admin", "teacher"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Teacher access required"
+        )
+    return current_user
+
+
+def get_teacher_classes(user: User, db: Session):
+    """
+    Get list of class names that teacher has access to.
+    Returns None for admin (has access to all classes).
+    Returns list of class names for teacher.
+    """
+    from .models import TeacherClassAccess
+    
+    if user.role == "admin":
+        return None  # Admin has access to all classes
+    
+    # Get teacher's assigned classes
+    accesses = db.query(TeacherClassAccess).filter(
+        TeacherClassAccess.user_id == user.id
+    ).all()
+    
+    return [access.class_name for access in accesses]

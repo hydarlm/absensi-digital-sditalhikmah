@@ -55,6 +55,15 @@ const statusLabels: Record<AttendanceStatus, string> = {
   'A': 'Alpha',
 };
 
+// Move determineStatus outside component to prevent recreation on every render
+const determineStatus = (scanTime: Date, threshold: string): AttendanceStatus => {
+  const [hours, minutes] = threshold.split(':').map(Number);
+  const thresholdTime = new Date(scanTime);
+  thresholdTime.setHours(hours, minutes, 0, 0);
+
+  return scanTime <= thresholdTime ? 'H' : 'T';
+};
+
 export default function DashboardPage() {
   const { toast } = useToast();
   const [selectedDate, setSelectedDate] = useState<string>(
@@ -122,13 +131,30 @@ export default function DashboardPage() {
           selectedClass
         );
 
-        // Convert to StudentRow format
-        const rows: StudentRow[] = data.map((student) => ({
-          ...student,
-          displayStatus: student.status ? statusMap[student.status] : null,
-          scanTime: student.scanned_at ? new Date(student.scanned_at) : undefined,
-          isManual: false,
-        }));
+        // Convert to StudentRow format with proper late detection
+        const rows: StudentRow[] = data.map((student) => {
+          let displayStatus: AttendanceStatus | null = null;
+
+          // If student has attendance record
+          if (student.status) {
+            // If status is Present, check if actually late based on scan time
+            if (student.status === 'Present' && student.scanned_at && lateThreshold) {
+              const scanTime = new Date(student.scanned_at);
+              const calculatedStatus = determineStatus(scanTime, lateThreshold);
+              displayStatus = calculatedStatus;
+            } else {
+              // Use backend status for other statuses (Sick, Permission, Absent, etc)
+              displayStatus = statusMap[student.status];
+            }
+          }
+
+          return {
+            ...student,
+            displayStatus,
+            scanTime: student.scanned_at ? new Date(student.scanned_at) : undefined,
+            isManual: false,
+          };
+        });
 
         setStudents(rows);
         setOriginalStudents(JSON.parse(JSON.stringify(rows))); // Deep copy
@@ -146,7 +172,7 @@ export default function DashboardPage() {
     };
 
     loadStudents();
-  }, [selectedClass, selectedDate, toast]);
+  }, [selectedClass, selectedDate, toast, lateThreshold]);
 
   // Subscribe to scan events
   useEffect(() => {
@@ -178,14 +204,6 @@ export default function DashboardPage() {
 
     return unsubscribe;
   }, [lateThreshold]);
-
-  const determineStatus = (scanTime: Date, threshold: string): AttendanceStatus => {
-    const [hours, minutes] = threshold.split(':').map(Number);
-    const thresholdTime = new Date(scanTime);
-    thresholdTime.setHours(hours, minutes, 0, 0);
-
-    return scanTime <= thresholdTime ? 'H' : 'T';
-  };
 
   const handleManualStatus = (studentId: number, status: AttendanceStatus) => {
     setStudents((prev) =>

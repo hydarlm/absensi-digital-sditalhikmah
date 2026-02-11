@@ -90,4 +90,54 @@ export const studentsService = {
     const response = await apiFetch<{ classes: string[] }>('/reports/classes');
     return response.classes;
   },
+
+  // Import students from CSV file
+  importStudents: async (file: File): Promise<{
+    total_rows: number;
+    success: number;
+    failed: number;
+    duplicates: number;
+    errors: Array<{
+      row: number;
+      nis: string;
+      name: string;
+      class_name: string;
+      success: boolean;
+      error?: string;
+    }>;
+  }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const token = localStorage.getItem('auth_token');
+    const response = await fetch(`${API_BASE_URL}/students/import`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Import failed' }));
+      throw new Error(error.detail || 'Import failed');
+    }
+
+    return response.json();
+  },
+
+  // Download import template
+  downloadTemplate: (): void => {
+    const token = localStorage.getItem('auth_token');
+    const url = `${API_BASE_URL}/students/import/template`;
+
+    // Create a temporary link and trigger download
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'template_import_siswa.csv';
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  },
 };

@@ -39,7 +39,7 @@ export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): 
 
 // Auth API
 export const authAPI = {
-  login: async (username: string, password: string) => {
+  login: async (username: string, password: string): Promise<{ access_token: string; role: string }> => {
     // Backend expects form-data for OAuth2PasswordRequestForm
     const formData = new FormData();
     formData.append('username', username);
@@ -57,11 +57,11 @@ export const authAPI = {
     return response.json();
   },
 
-  logout: async () => {
-    return apiFetch('/auth/logout', { method: 'POST' });
+  logout: async (): Promise<void> => {
+    return apiFetch<void>('/auth/logout', { method: 'POST' });
   },
 
-  me: async () => {
+  me: async (): Promise<{ id: number; username: string; role: string; is_active: boolean; created_at: string }> => {
     return apiFetch('/auth/me');
   },
 };

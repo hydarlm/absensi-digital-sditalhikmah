@@ -1,15 +1,18 @@
 
 import os
+import io
+import csv
 from datetime import datetime
-from typing import List
+from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
+from pathlib import Path
 from sqlalchemy.exc import IntegrityError
 from ..database import get_db
-from ..schemas import StudentCreate, StudentUpdate, StudentResponse
+from ..schemas import StudentCreate, StudentUpdate, StudentResponse, ImportSummary, ImportResultRow
 from ..models import Student, User
-from ..auth import get_current_user
+from ..auth import get_current_user, require_admin
 from ..barcode import generate_token, save_qr_image
 from ..config import get_settings
 
@@ -324,3 +327,178 @@ async def get_student_photo(
         filename=f"Photo_{student.nis}_{student.name}.{file_extension}"
     )
 
+
+@router.post("/import", response_model=ImportSummary, dependencies=[Depends(require_admin)])
+async def import_students(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Bulk import students from CSV file.
+    Admin only.
+    
+    Expected format:
+    NIS, Name, Class
+    12345, Ahmad Fauzi, 1A
+    12346, Siti Nurhaliza, 1A
+    """
+    
+    # Validate file type
+    if not file.filename:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No filename provided"
+        )
+    
+    file_ext = Path(file.filename).suffix.lower()
+    if file_ext not in ['.csv']:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid file format. Please upload CSV file"
+        )
+    
+    # Read file content
+    content = await file.read()
+    
+    # Parse CSV file
+    try:
+        data = parse_csv(content)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Error parsing file: {str(e)}"
+        )
+    
+    # Process imports
+    success_count = 0
+    error_count = 0
+    results: List[ImportResultRow] = []
+    
+    for row_num, row_data in enumerate(data, start=2):  # Start at 2 (header is row 1)
+        try:
+            # Validate required fields
+            nis = row_data.get('nis', '').strip()
+            name = row_data.get('name', '').strip()
+            class_name = row_data.get('class', '').strip()
+            
+            if not nis or not name or not class_name:
+                error_count += 1
+                results.append(ImportResultRow(
+                    row=row_num,
+                    nis=nis or "N/A",
+                    name=name or "N/A",
+                    class_name=class_name or "N/A",
+                    success=False,
+                    error="Missing required fields (NIS, Name, or Class)"
+                ))
+                continue
+            
+            # Check for duplicate NIS
+            existing = db.query(Student).filter(Student.nis == nis).first()
+            if existing:
+                error_count += 1
+                results.append(ImportResultRow(
+                    row=row_num,
+                    nis=nis,
+                    name=name,
+                    class_name=class_name,
+                    success=False,
+                    error=f"NIS {nis} already exists"
+                ))
+                continue
+            
+            # Create student
+            student = Student(
+                nis=nis,
+                name=name,
+                class_name=class_name
+            )
+            
+            db.add(student)
+            db.flush()  # Get the ID without committing
+            
+            success_count += 1
+            results.append(ImportResultRow(
+                row=row_num,
+                nis=nis,
+                name=name,
+                class_name=class_name,
+                success=True,
+                error=None
+            ))
+            
+        except Exception as e:
+            error_count += 1
+            results.append(ImportResultRow(
+                row=row_num,
+                nis=row_data.get('nis', 'N/A'),
+                name=row_data.get('name', 'N/A'),
+                class_name=row_data.get('class', 'N/A'),
+                success=False,
+                error=str(e)
+            ))
+    
+    # Commit all successful imports
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error saving to database: {str(e)}"
+        )
+    
+    return ImportSummary(
+        total_rows=len(data),
+        success=success_count,
+        failed=error_count,
+        duplicates=0,  # We already counted duplicates in error_count
+        errors=results
+    )
+
+
+@router.get("/import/template")
+async def download_import_template():
+    """Download CSV template for bulk import."""
+    
+    # Create CSV template
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # Write header
+    writer.writerow(['nis', 'name', 'class'])
+    
+    # Write example rows
+    writer.writerow(['12345', 'Ahmad Fauzi', '1A'])
+    writer.writerow(['12346', 'Siti Nurhaliza', '1A'])
+    writer.writerow(['12347', 'Budi Santoso', '1B'])
+    
+    # Convert to bytes
+    output.seek(0)
+    
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": "attachment; filename=template_import_siswa.csv"
+        }
+    )
+
+
+def parse_csv(content: bytes) -> List[Dict[str, str]]:
+    """Parse CSV file content into list of dictionaries."""
+    
+    # Decode bytes to string
+    text = content.decode('utf-8-sig')  # utf-8-sig handles BOM
+    
+    # Parse CSV
+    reader = csv.DictReader(io.StringIO(text))
+    
+    # Convert to list of dicts
+    data = []
+    for row in reader:
+        # Normalize keys to lowercase and strip whitespace
+        normalized_row = {k.strip().lower(): v.strip() for k, v in row.items()}
+        data.append(normalized_row)
+    
+    return data

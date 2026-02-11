@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Container } from '@/components/layout/DashboardLayout';
 import { QRScanner } from '@/components/features/QRScanner';
 import { attendanceService } from '@/services/attendance';
-import { Student } from '@/services/students';
+import type { Student } from '@/types';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -18,6 +18,20 @@ interface ScanResult {
   message: string;
   student?: Student;
 }
+
+// Create AudioContext once to avoid memory leaks
+let audioContext: AudioContext | null = null;
+
+const getAudioContext = () => {
+  if (!audioContext) {
+    try {
+      audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    } catch (e) {
+      console.warn('Audio not supported');
+    }
+  }
+  return audioContext;
+};
 
 export default function ScanPage() {
   const [scanResult, setScanResult] = useState<ScanResult>({
@@ -42,7 +56,7 @@ export default function ScanPage() {
         setScanResult({
           status: result.success ? 'success' : 'error',
           message: result.message,
-          student: result.student,
+          student: result.student,  // Types now match, no mapping needed
         });
 
         // Emit scan event for Dashboard to receive
@@ -88,21 +102,23 @@ export default function ScanPage() {
   };
 
   const playSound = (type: 'success' | 'error') => {
-    // Simple beep using Web Audio API
+    // Use shared AudioContext to prevent memory leaks
     try {
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const oscillator = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
+      const ctx = getAudioContext();
+      if (!ctx) return;
+
+      const oscillator = ctx.createOscillator();
+      const gainNode = ctx.createGain();
 
       oscillator.connect(gainNode);
-      gainNode.connect(audioContext.destination);
+      gainNode.connect(ctx.destination);
 
       oscillator.frequency.value = type === 'success' ? 800 : 300;
       oscillator.type = 'sine';
       gainNode.gain.value = 0.3;
 
       oscillator.start();
-      oscillator.stop(audioContext.currentTime + 0.2);
+      oscillator.stop(ctx.currentTime + 0.2);
     } catch (e) {
       // Audio not supported
     }
@@ -168,13 +184,13 @@ export default function ScanPage() {
                       <motion.div className="space-y-3" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
                         <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.3, type: 'spring', stiffness: 200 }}>
                           <Avatar className="h-24 w-24 mx-auto border-4 border-white shadow-xl ring-4 ring-primary/10">
-                            <AvatarImage src={scanResult.student.photo || undefined} />
+                            <AvatarImage src={scanResult.student.photo_path ? `/api/students/${scanResult.student.id}/photo` : undefined} />
                             <AvatarFallback className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground text-2xl font-bold">{getInitials(scanResult.student.name)}</AvatarFallback>
                           </Avatar>
                         </motion.div>
                         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}>
                           <p className="text-2xl font-bold text-foreground">{scanResult.student.name}</p>
-                          <p className="text-base text-muted-foreground font-medium mt-1">Kelas {scanResult.student.class}</p>
+                          <p className="text-base text-muted-foreground font-medium mt-1">Kelas {scanResult.student.class_name}</p>
                         </motion.div>
                       </motion.div>
                     )}

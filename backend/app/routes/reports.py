@@ -1,14 +1,14 @@
 """
 Reports API routes for semester reports and analytics.
 """
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import extract, func, case
 from typing import List, Optional
 from ..database import get_db
 from ..schemas import SemesterReportItem, ClassListResponse
 from ..models import Student, Attendance
-from ..auth import get_current_user, User
+from ..auth import get_current_user, User, get_teacher_classes
 
 router = APIRouter(prefix="/api/reports", tags=["Reports"])
 
@@ -26,15 +26,25 @@ async def get_semester_report(
     
     Semester 1 (Ganjil): July - December (months 7-12)
     Semester 2 (Genap): January - June (months 1-6)
+    
+    Teachers can only access reports for assigned classes.
     """
     
-    # Determine month range based on semester
+    allowed_classes = get_teacher_classes(current_user, db)
+    
+    if allowed_classes is not None:  # Teacher
+        if class_name:
+            if class_name not in allowed_classes:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Access denied to class {class_name}"
+                )
+    
     if semester == 1:
         start_month, end_month = 7, 12
     else:
         start_month, end_month = 1, 6
     
-    # Build query with status breakdown using CASE statements
     query = db.query(
         Student.nis.label('student_id'),
         Student.name.label('student_name'),
@@ -54,11 +64,14 @@ async def get_semester_report(
         Attendance.is_undone == False  # Only count non-undone attendance
     )
     
-    # Apply class filter if provided
-    if class_name:
+    if allowed_classes is not None:  # Teacher
+        if class_name:
+            query = query.filter(Student.class_name == class_name)
+        else:
+            query = query.filter(Student.class_name.in_(allowed_classes))
+    elif class_name:  # Admin 
         query = query.filter(Student.class_name == class_name)
     
-    # Group by student
     query = query.group_by(
         Student.id, Student.nis, Student.name, Student.class_name
     ).order_by(
@@ -67,7 +80,6 @@ async def get_semester_report(
     
     results = query.all()
     
-    # Format response
     report = []
     for row in results:
         total_present = row.total_present or 0
@@ -76,13 +88,10 @@ async def get_semester_report(
         total_permission = row.total_permission or 0
         total_absent = row.total_absent or 0
         
-        # Calculate total attendance records for this student
         total_records = total_present + total_late + total_sick + total_permission + total_absent
         
-        # Calculate attendance count (Present + Late = attended)
         total_attended = total_present + total_late
         
-        # Calculate percentage based on total records, not hardcoded days
         attendance_percentage = (total_attended / total_records * 100) if total_records > 0 else 0.0
         
         report.append(SemesterReportItem(
@@ -106,9 +115,18 @@ async def get_classes_list(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Get list of unique classes from students table.
+    Get list of classes accessible by current user.
+    Admin: all classes
+    Teacher: only assigned classes
     """
-    classes = db.query(Student.class_name).distinct().order_by(Student.class_name).all()
-    class_list = [c[0] for c in classes if c[0]]  # Extract string from tuple and filter None
+    from ..auth import get_teacher_classes
+    
+    allowed_classes = get_teacher_classes(current_user, db)
+    
+    if allowed_classes is None:  # Admin 
+        classes = db.query(Student.class_name).distinct().order_by(Student.class_name).all()
+        class_list = [c[0] for c in classes if c[0]]  
+    else:  # Teacher 
+        class_list = sorted(allowed_classes)
     
     return ClassListResponse(classes=class_list)

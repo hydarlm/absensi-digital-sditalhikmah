@@ -13,6 +13,7 @@ import ScanPage from "@/pages/ScanPage";
 import StudentsPage from "@/pages/StudentsPage";
 import ReportsPage from "@/pages/ReportsPage";
 import ClassSchedulePage from "@/pages/ClassSchedulePage";
+import UsersPage from "@/pages/UsersPage";  // NEW
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -47,6 +48,11 @@ const App = () => (
 
             <Route element={<DashboardLayout title="Laporan Semester" subtitle="Rekap kehadiran siswa per semester" />}>
               <Route path="/dashboard/reports" element={<ReportsPage />} />
+            </Route>
+
+            {/* Admin Only Routes */}
+            <Route element={<DashboardLayout title="Kelola Pengguna" subtitle="Manajemen pengguna dan assignment kelas" />}>
+              <Route path="/dashboard/users" element={<UsersPage />} />
             </Route>
 
             {/* Redirects */}

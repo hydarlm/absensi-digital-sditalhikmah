@@ -23,7 +23,6 @@ async def get_class_schedules(
     
     result = []
     for schedule in schedules:
-        # Convert time to HH:MM string
         late_time_str = schedule.late_threshold_time.strftime('%H:%M') if schedule.late_threshold_time else '07:30'
         
         result.append(ClassScheduleResponse(
@@ -44,7 +43,6 @@ async def create_class_schedule(
     current_user: User = Depends(get_current_user)
 ):
     """Create a new class schedule."""
-    # Check if class already exists
     existing = db.query(ClassSchedule).filter(ClassSchedule.class_name == class_name).first()
     if existing:
         raise HTTPException(
@@ -52,7 +50,6 @@ async def create_class_schedule(
             detail="Class already exists"
         )
     
-    # Parse time string
     try:
         hours, minutes = late_threshold_time.split(':')
         threshold_time = time(int(hours), int(minutes))

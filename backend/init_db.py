@@ -33,6 +33,7 @@ def init_database():
             admin = User(
                 username="admin",
                 hashed_password=hash_password("admin123"),
+                role="admin",  # EXPLICITLY SET ADMIN ROLE
                 is_active=True
             )
             db.add(admin)

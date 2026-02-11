@@ -6,13 +6,11 @@ from .config import get_settings
 
 settings = get_settings()
 
-# Create SQLite engine
-engine = create_engine(
-    settings.DATABASE_URL,
-    connect_args={"check_same_thread": False}  # Needed for SQLite
-)
+# buat tabel di database
+engine = create_engine(settings.DATABASE_URL)
 
-# Create session factory
+
+# buat session 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # Base class for models
