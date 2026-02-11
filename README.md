@@ -1,26 +1,10 @@
 # 🏫 SDIT AL HIKMAH - Sistem Absensi Digital
 
 <div align="center">
-  <img src="/public/logosekolah.png/logosekolah.png" alt="SDIT AL HIKMAH Logo" width="120" />
+  <img src="/frontend/public/logosekolah.png" alt="SDIT AL HIKMAH Logo" width="120" />
   <h3>Sistem Absensi Digital Berbasis QR Code</h3>
   <p>Solusi modern untuk pencatatan kehadiran siswa Sekolah Dasar Islam Terpadu</p>
 </div>
-
----
-
-## 📋 Daftar Isi
-
-- [Tentang Aplikasi](#-tentang-aplikasi)
-- [Fitur Utama](#-fitur-utama)
-- [Teknologi](#-teknologi)
-- [Instalasi](#-instalasi)
-- [Konfigurasi](#-konfigurasi)
-- [Penggunaan](#-penggunaan)
-- [Struktur Folder](#-struktur-folder)
-- [Integrasi Backend](#-integrasi-backend)
-- [Screenshots](#-screenshots)
-- [FAQ](#-faq)
-- [Lisensi](#-lisensi)
 
 ---
 
@@ -77,7 +61,7 @@
 |----------|-----------|
 | **Framework** | React 18 + TypeScript |
 | **Build Tool** | Vite |
-| **Styling** | Tailwind CSS |
+| **Styling** | Tailwind CSS, Framer Motion |
 | **UI Components** | Shadcn UI (Radix UI) |
 | **QR Scanner** | html5-qrcode |
 | **State Management** | React Query + Context |
@@ -88,162 +72,31 @@
 
 ---
 
-## 🚀 Instalasi
-
-### Prasyarat
-- Node.js 18+ atau Bun
-- npm, yarn, atau bun
-
-### Langkah Instalasi
-
-```bash
-# 1. Clone repository
-git clone <YOUR_GIT_URL>
-cd <YOUR_PROJECT_NAME>
-
-# 2. Install dependencies
-npm install
-# atau
-bun install
-
-# 3. Copy environment file
-cp .env.example .env
-
-# 4. Jalankan development server
-npm run dev
-# atau
-bun dev
-```
-
-Aplikasi akan berjalan di `http://localhost:5173`
-
----
-
-## ⚙️ Konfigurasi
-
-### Environment Variables
-
-Buat file `.env` di root project:
-
-```env
-# API Backend URL
-VITE_API_BASE_URL=http://localhost:8000/api
-```
-
-### Konfigurasi Waktu Absensi
-
-Waktu absensi dikonfigurasi di backend:
-- **Hadir**: Scan sebelum 07:30
-- **Terlambat**: Scan setelah 07:30
-
----
-
 ## 📖 Penggunaan
 
-### 1. Login
-```
-Email: guru@example.com
-Password: password123
-Role: Guru 
-```
-
-### 2. Dashboard
+### 1. Dashboard
 Setelah login, Anda akan melihat:
 - Statistik kehadiran hari ini
 - Daftar siswa yang sudah absen pada hari itu
 - Notifikasi sistem
 
-### 3. Scan Absensi
+### 2. Scan Absensi
 1. Klik menu **"Scan Absensi"**
 2. Izinkan akses kamera
 3. Arahkan kamera ke QR Code siswa
 4. Tunggu konfirmasi berhasil
 
-### 4. Kelola Data Siswa
+### 3. Kelola Data Siswa
 1. Klik menu **"Data Siswa"**
 2. Klik **"Tambah Siswa"** untuk input baru
 3. Klik ikon edit/hapus untuk modifikasi
 4. Gunakan filter kelas untuk mempermudah pencarian
 
-### 5. Laporan Semester
+### 4. Laporan Semester
 1. Klik menu **"Laporan"**
 2. Pilih semester dan tahun
 3. (Opsional) Filter berdasarkan kelas
 4. Klik **"Export Excel"** untuk download
-
----
-
-## 📁 Struktur Folder
-
-```
-src/
-├── components/
-│   ├── layout/           # Layout components
-│   │   ├── DashboardLayout.tsx
-│   │   ├── Header.tsx
-│   │   └── Sidebar.tsx
-│   ├── features/         # Feature components
-│   │   ├── QRScanner.tsx
-│   │   ├── StudentForm.tsx
-│   │   ├── StudentTable.tsx
-│   │   ├── AttendanceTable.tsx
-│   │   ├── SemesterFilter.tsx
-│   │   └── NotificationDropdown.tsx
-│   └── ui/               # Shadcn UI components
-│
-├── pages/
-│   ├── LoginPage.tsx     # Halaman login
-│   ├── DashboardPage.tsx # Dashboard utama
-│   ├── ScanPage.tsx      # Scan QR Code
-│   ├── StudentsPage.tsx  # CRUD data siswa
-│   └── ReportsPage.tsx   # Laporan semester
-│
-├── services/
-│   ├── api.ts            # API wrapper & config
-│   ├── attendance.ts     # Service absensi
-│   └── students.ts       # Service siswa
-│
-├── context/
-│   └── AuthContext.tsx   # Authentication context
-│
-├── utils/
-│   ├── formatters.ts     # Format tanggal, status
-│   ├── validators.ts     # Validasi form (Zod)
-│   ├── exportUtils.ts    # Generic CSV export
-│   └── exportExcel.ts    # Specific export functions
-│
-├── hooks/
-│   └── use-mobile.tsx    # Responsive hook
-```
-
----
-
-## 🔌 Integrasi Backend
-
-### Dokumentasi API
-Lihat file lengkap di: **[docs/backendSpecification.md](docs/BACKEND_API_SPEC.md)**
-
-### Ringkasan Endpoint
-
-| Method | Endpoint | Deskripsi |
-|--------|----------|-----------|
-| POST | `/auth/login` | Login user |
-| GET | `/auth/me` | Validasi token |
-| POST | `/auth/logout` | Logout |
-| GET | `/students` | Daftar semua siswa |
-| POST | `/students` | Tambah siswa baru |
-| PUT | `/students/{id}` | Update siswa |
-| DELETE | `/students/{id}` | Hapus siswa |
-| POST | `/attendance/scan` | Catat absensi |
-| GET | `/attendance/today` | Absensi hari ini |
-| GET | `/attendance/stats` | Statistik dashboard |
-| GET | `/reports/semester` | Laporan semester |
-
-### Format Barcode
-```
-Format: SDIT + TAHUN + 3 DIGIT
-Contoh: SDIT2024001, SDIT2024002
-```
 
 ---
 
@@ -287,11 +140,11 @@ Contoh: SDIT2024001, SDIT2024002
 
 ---
 
-## 👥 Tim Pengembang
+## 👥 Tim Magang SDIT AL HIKMAH
 
-- **Frontend**: React + TypeScript
-- **Backend**: (Dikerjakan terpisah - lihat docs/BACKEND_API_SPEC.md)
-- **Design**: Islamic-themed, child-friendly UI
+- **Haydar Ahadya Al Mansuri**
+- **Muhammad Divaul Aula**
+- **Wulan Tsania**
 
 ---
 
