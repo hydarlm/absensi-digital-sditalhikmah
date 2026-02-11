@@ -252,7 +252,6 @@ async def get_attendance_stats(
         )
     ).scalar()
     
-    # This month
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     if now.month == 12:
         month_end = month_start.replace(year=now.year + 1, month=1)
@@ -267,7 +266,6 @@ async def get_attendance_stats(
         )
     ).scalar()
     
-    # Total students (also filtered by class for teachers)
     student_query = db.query(func.count(Student.id))
     if allowed_classes is not None:  # Teacher
         student_query = student_query.filter(Student.class_name.in_(allowed_classes))
@@ -300,13 +298,11 @@ async def get_class_attendance(
             detail="Invalid date format. Use YYYY-MM-DD"
         )
     
-    # Get all students in the class
     students = db.query(Student).filter(Student.class_name == class_name).order_by(Student.name).all()
     
     if not students:
         return []
     
-    # Get attendance records for this class and date
     attendance_records = db.query(Attendance).filter(
         and_(
             Attendance.student_id.in_([s.id for s in students]),
@@ -316,10 +312,8 @@ async def get_class_attendance(
         )
     ).all()
     
-    # Create a map of student_id to attendance
     attendance_map = {att.student_id: att for att in attendance_records}
     
-    # Build response
     result = []
     for student in students:
         attendance = attendance_map.get(student.id)
@@ -362,12 +356,10 @@ async def batch_update_attendance(
     created_count = 0
     
     for record in batch_data.records:
-        # Check if student exists
         student = db.query(Student).filter(Student.id == record.student_id).first()
         if not student:
             continue
         
-        # Check if attendance already exists for this student on this date
         existing_attendance = db.query(Attendance).filter(
             and_(
                 Attendance.student_id == record.student_id,
@@ -377,7 +369,6 @@ async def batch_update_attendance(
             )
         ).first()
         
-        # Parse scan_time if provided
         if record.scan_time:
             try:
                 scan_time = datetime.fromisoformat(record.scan_time.replace('Z', '+00:00'))

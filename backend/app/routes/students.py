@@ -92,7 +92,6 @@ async def update_student(
             detail="Student not found"
         )
     
-    # Update fields if provided
     update_data = student_data.model_dump(exclude_unset=True)
     
     try:
@@ -125,14 +124,12 @@ async def delete_student(
             detail="Student not found"
         )
     
-    # Delete QR image file if exists
     if student.barcode_token:
         qr_filename = f"student_{student.id}.png"
         qr_filepath = os.path.join(settings.STORAGE_PATH, "barcodes", qr_filename)
         if os.path.exists(qr_filepath):
             os.remove(qr_filepath)
     
-    # Delete photo file if exists
     if student.photo_path:
         photo_filepath = os.path.join(settings.STORAGE_PATH, student.photo_path)
         if os.path.exists(photo_filepath):
@@ -159,22 +156,18 @@ async def generate_student_qr(
             detail="Student not found"
         )
     
-    # Check if QR already generated
     if student.barcode_token:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="QR code already generated for this student"
         )
     
-    # Generate token
     token, nonce = generate_token(str(student.id))
     
-    # Update student record
     student.barcode_token = token
     student.barcode_nonce = nonce
     student.barcode_generated_at = datetime.utcnow()
     
-    # Save QR image to storage
     qr_filename = f"student_{student.id}.png"
     barcodes_dir = os.path.join(settings.STORAGE_PATH, "barcodes")
     os.makedirs(barcodes_dir, exist_ok=True)
@@ -243,7 +236,6 @@ async def upload_student_photo(
             detail="Student not found"
         )
     
-    # Validate file type
     allowed_extensions = ['jpg', 'jpeg', 'png', 'gif']
     file_extension = photo.filename.split('.')[-1].lower()
     
@@ -253,17 +245,14 @@ async def upload_student_photo(
             detail=f"Invalid file type. Allowed: {', '.join(allowed_extensions)}"
         )
     
-    # Create photos directory
     photos_dir = os.path.join(settings.STORAGE_PATH, "photos")
     os.makedirs(photos_dir, exist_ok=True)
     
-    # Delete old photo if exists
     if student.photo_path:
         old_photo_path = os.path.join(settings.STORAGE_PATH, student.photo_path)
         if os.path.exists(old_photo_path):
             os.remove(old_photo_path)
     
-    # Save new photo
     photo_filename = f"student_{student.id}.{file_extension}"
     photo_filepath = os.path.join(photos_dir, photo_filename)
     
@@ -271,7 +260,6 @@ async def upload_student_photo(
         content = await photo.read()
         buffer.write(content)
     
-    # Update student record with relative path
     student.photo_path = f"photos/{photo_filename}"
     db.commit()
     db.refresh(student)
@@ -343,7 +331,6 @@ async def import_students(
     12346, Siti Nurhaliza, 1A
     """
     
-    # Validate file type
     if not file.filename:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -357,10 +344,8 @@ async def import_students(
             detail="Invalid file format. Please upload CSV file"
         )
     
-    # Read file content
     content = await file.read()
     
-    # Parse CSV file
     try:
         data = parse_csv(content)
     except Exception as e:
@@ -369,14 +354,12 @@ async def import_students(
             detail=f"Error parsing file: {str(e)}"
         )
     
-    # Process imports
     success_count = 0
     error_count = 0
     results: List[ImportResultRow] = []
     
     for row_num, row_data in enumerate(data, start=2):  # Start at 2 (header is row 1)
         try:
-            # Validate required fields
             nis = row_data.get('nis', '').strip()
             name = row_data.get('name', '').strip()
             class_name = row_data.get('class', '').strip()
